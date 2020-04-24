@@ -50,7 +50,7 @@ class CustomGroup(click.Group):
         if "client" in obj.obj:
             await obj["client"].close()
 
-        if save_exception:
+        if save_exception and not isinstance(save_exception, click.Abort):
             raise save_exception
         return return_code
 
@@ -85,17 +85,25 @@ async def main(ctx, v):
 @main.command()
 @click.argument("pool_id", type=int, nargs=-1)
 @common_decorator
-async def pool(ctx, pool_id, output, jobs, type):
+async def pool(ctx, pool_id, output, jobs, type, pools=None):
     """Download pool(s)."""
+    if isinstance(pool_id, int) and pool_id < 0 and not pools:
+        error("No pools found. Breaking.")
+        return
     os.makedirs(output, exist_ok=True)
-    for pid in pool_id:
-        echo("Fetching pool...")
 
-        pool = await get_pool(ctx, pid)
-        if not pool:
-            warning(f"Pool #{pid} was not found. Skipping.")
-            continue
+    if not pools:
+        pools = []
+        for pid in pool_id:
+            echo("Fetching pool...")
 
+            pool = await get_pool(ctx, pid)
+            if not pool:
+                warning(f"Pool #{pid} was not found. Skipping.")
+                continue
+            pools.append(pool)
+
+    for pool in pools:
         if not ctx.obj["interactive"]:
             ctx.obj["banner_printed"] = True
             echo("==================")

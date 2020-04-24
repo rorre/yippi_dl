@@ -1,7 +1,14 @@
 import asyncclick as click
 
 from .__main__ import pool, post
-from .helper import get_pool, get_pool_id, get_post, get_post_id
+from .helper import (
+    get_pool,
+    get_pool_id,
+    get_post,
+    get_post_id,
+    print_pool,
+    print_post
+)
 
 
 def invalid_input(ctx):
@@ -18,7 +25,11 @@ async def select_post(ctx):
     click.echo("When you're done, you can give me an empty line.")
     posts = []
     while True:
-        response = click.prompt("", prompt_suffix="> ", default="", show_default=False)
+        # fmt: off
+        response = click.prompt(
+            "", prompt_suffix="> ", default="", show_default=False
+        )
+        # fmt: on
         if not response or not response.strip():
             break
 
@@ -29,6 +40,7 @@ async def select_post(ctx):
 
         obj = await get_post(ctx, post_id)
         if obj:
+            print_post(obj)
             posts.append(obj)
 
     output = click.prompt(
@@ -60,7 +72,11 @@ async def select_pool(ctx):
     click.echo("When you're done, you can give me an empty line.")
     pools = []
     while True:
-        response = click.prompt("", prompt_suffix="> ", default="", show_default=False)
+        # fmt: off
+        response = click.prompt(
+            "", prompt_suffix="> ", default="", show_default=False
+        )
+        # fmt: on
         if not response or not response.strip():
             if not pools:
                 continue
@@ -73,9 +89,10 @@ async def select_pool(ctx):
 
         obj = await get_pool(ctx, pool_id)
         if obj:
+            print_pool(obj)
             pools.append(obj)  # noqa
         else:
-            click.secho(f'Pool "{response}" was not found.')  # noqa
+            click.secho(f'Pool "{pool_id}" was not found.')  # noqa
 
     output = click.prompt(
         "Where will the images be saved? ", type=click.Path(), default="."
@@ -91,7 +108,9 @@ async def select_pool(ctx):
         type=click.Choice(["sample", "file", "preview"]),
         default="file",
     )
-    await ctx.invoke(pool, pool_id=pools, output=output, jobs=jobs, type=type_)
+    await ctx.invoke(
+        pool, pool_id=-1, output=output, jobs=jobs, type=type_, pools=pools
+    )
 
 
 func_table = {"1": select_post, "2": select_pool}
