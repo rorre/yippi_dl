@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 import traceback
 
 import aiohttp
@@ -50,8 +51,10 @@ class CustomGroup(click.Group):
         if "client" in obj.obj:
             await obj["client"].close()
 
-        if save_exception and not isinstance(save_exception, click.Abort):
-            raise save_exception
+        if save_exception:
+            ignored = (click.Abort, click.ClickException)
+            if isinstance(save_exception, ignored):
+                sys.exit(1)
         return return_code
 
 
