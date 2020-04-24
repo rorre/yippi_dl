@@ -142,16 +142,18 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
         number = 1
         for post in posts:
             image_url = getattr(post, type)["url"]
-            image_name = os.path.join(output, image_url.split("/")[-1])
+            image_name = image_url.split("/")[-1]
             if add_number:
                 image_name = f"{number}. " + image_name
-            if os.path.exists(image_name):
+            
+            image_path = os.path.join(output, image_name)
+            if os.path.exists(image_path):
                 if always_skip:
                     bar.update(1)
                     continue
 
                 click.echo(
-                    image_name + " already exists, do you want to skip? "
+                    image_path + " already exists, do you want to skip? "
                     "[(A)lways/(Y)es/(N)o]",
                     nl=False,
                 )
@@ -165,7 +167,7 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
                     bar.update(1)
                     continue
             number += 1
-            await queue.put([image_url, image_name, post])
+            await queue.put([image_url, image_path, post])
 
         await queue.join()
 
