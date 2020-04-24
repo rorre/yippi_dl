@@ -175,7 +175,7 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
             image_url = getattr(post, type)["url"]
             image_name = image_url.split("/")[-1]
             if add_number:
-                image_name = f"{number}. " + image_name
+                image_name = f"{number} - " + image_name
 
             image_path = os.path.join(output, image_name)
             if not always_replace:
