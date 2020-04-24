@@ -121,10 +121,13 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
             if obj:
                 posts.append(obj)
 
+    valid_posts = []
     for post in posts:
-        if not getattr(post, type)["url"]:
+        if getattr(post, type)["url"]:
+            valid_posts.append(post)
+        else:
             warning(f"Warning: Post #{post.id} has been deleted.")
-            posts.pop(post)
+    posts = valid_posts
 
     total = len(posts)
     workers = []
@@ -145,7 +148,7 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
             image_name = image_url.split("/")[-1]
             if add_number:
                 image_name = f"{number}. " + image_name
-            
+
             image_path = os.path.join(output, image_name)
             if os.path.exists(image_path):
                 if always_skip:
@@ -157,7 +160,7 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
                     "[(A)lways/(Y)es/(N)o]",
                     nl=False,
                 )
-                option = click.getchar().lower()
+                option = click.getchar(echo=True).lower()
                 click.echo("")
                 if option == "y":
                     bar.update(1)
