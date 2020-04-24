@@ -1,17 +1,22 @@
 import asyncio
 import os
+import traceback
+
 import aiohttp
-from yippi import AsyncYippiClient
 import asyncclick as click
+
+from yippi import AsyncYippiClient
 
 from .helper import (
     ask_skip,
     common_decorator,
     download_worker,
+    echo,
     error,
     get_pool,
     get_post,
     print_pool,
+    verbose,
     warning,
 )
 
@@ -55,19 +60,24 @@ class CustomGroup(click.Group):
     context_settings=dict(help_option_names=["-h", "--help"]),
     cls=CustomGroup,
 )
+@click.option("-v", "--verbose", "v", is_flag=True)
 @click.pass_context
-async def main(ctx):
+async def main(ctx, v):
     """An e621 batch downloader."""
     ctx.obj = obj
+    ctx.obj["verbose"] = v
+    verbose("Initialize objects")
     ctx.obj["session"] = aiohttp.ClientSession()
     ctx.obj["client"] = AsyncYippiClient(
         "yippi_dl", "0.1.0", "Error-", ctx.obj["session"]
     )
     ctx.obj["interactive"] = False
     ctx.obj["banner_printed"] = False
+
     if ctx.invoked_subcommand is None:
         from .interactive import interactive
 
+        verbose("Enter interactive")
         ctx.obj["interactive"] = True
         await interactive(ctx)
 
@@ -79,19 +89,19 @@ async def pool(ctx, pool_id, output, jobs, type):
     """Download pool(s)."""
     os.makedirs(output, exist_ok=True)
     for pid in pool_id:
-        click.echo("Fetching pool...")
+        echo("Fetching pool...")
 
         pool = await get_pool(ctx, pid)
         if not pool:
-            warning(f"Warning: Pool #{pid} was not found. Skipping.")
+            warning(f"Pool #{pid} was not found. Skipping.")
             continue
 
         if not ctx.obj["interactive"]:
             ctx.obj["banner_printed"] = True
-            click.echo("==================")
+            echo("==================")
             print_pool(pool)
 
-        click.echo("Gathering posts...")
+        echo("Gathering posts...")
         posts = await pool.get_posts()
         await ctx.invoke(
             post,
@@ -115,13 +125,15 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
     os.makedirs(output, exist_ok=True)
 
     if not posts:
+        verbose("posts is not provided and post_id is valid. Asking API.")
         posts = []
-        click.echo("Gathering posts...")
+        echo("Gathering posts...")
         for post in post_id:
             obj = await get_post(ctx, post)
             if obj:
                 posts.append(obj)
 
+    verbose("Checking posts if image is deleted.")
     valid_posts = []
     for post in posts:
         if getattr(post, type)["url"]:
@@ -135,7 +147,9 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
     queue = asyncio.Queue()
     always_skip = False
     always_replace = False
+    verbose("Total posts: " + str(total))
     with click.progressbar(length=total, label="Downloading posts...") as bar:
+        verbose(f"Spawning {jobs} workers.")
         for _ in range(jobs):
             # fmt: off
             task = asyncio.create_task(
@@ -145,6 +159,7 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
             workers.append(task)
 
         number = 1
+        verbose(f"Sending posts to queue.")
         for post in posts:
             image_url = getattr(post, type)["url"]
             image_name = image_url.split("/")[-1]
@@ -155,27 +170,30 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
             if not always_replace:
                 if os.path.exists(image_path):
                     if always_skip:
+                        total -= 1
                         bar.update(1)
                         continue
                     choice = ask_skip(image_path)
 
                     if choice in ("y", "a"):
+                        total -= 1
                         always_skip = choice == "a"
                         bar.update(1)
+                        continue
                     always_replace = choice == "e"
 
             number += 1
-            await queue.put([image_url, image_path, post])
+            data = [image_url, image_path, post]
+            verbose("Sending: " + str(data))
+            await queue.put(data)
 
         await queue.join()
 
+    verbose("Cancelling workers.")
     for task in workers:
         task.cancel()
     await asyncio.gather(*workers, return_exceptions=True)
-    click.echo(f"Done downloading {total} image(s)!")
-
-    if not ctx.obj["interactive"]:
-        await ctx.obj["client"].close()
+    echo(f"Done downloading {total} image(s)!")
 
 
 @main.command()
@@ -189,7 +207,10 @@ async def batch(ctx, query, limit, output, jobs, type):
     os.makedirs(output, exist_ok=True)
     pagination_mode = False
     query_limit = limit
+
+    verbose("Checking if pagination should be enabled.")
     if limit > 320:
+        verbose("Limit is more than 320, enabling pagination.")
         pagination_mode = True
         query_limit = 320
 
@@ -202,19 +223,26 @@ async def batch(ctx, query, limit, output, jobs, type):
 
     posts = []
     if pagination_mode:
+        verbose("Pagination mode start.")
         page = 1
         while len(posts) < limit:
             if limit - len(posts) < 320:
                 query_limit = limit - len(posts)
+            verbose(f"Asking page: {page} | limit: {query_limit}")
 
             try:
                 api_response = await ctx.obj["client"].posts(
                     list(query), query_limit, page
                 )
-            except Exception as error:
+            except Exception as err:
                 # fmt: off
+                if ctx.obj["verbose"]:
+                    traceback.print_exception(
+                        type(err), err, err.__traceback__
+                    )
+
                 error(
-                    f"An exception has occured: `{error.__class__.__name__}`"
+                    f"An exception has occured: `{err.__class__.__name__}`"
                 )
                 # fmt: on
                 break
@@ -228,6 +256,7 @@ async def batch(ctx, query, limit, output, jobs, type):
             posts.extend(api_response)
             page += 1
     else:
+        verbose("Running without pagination mode. Asking API.")
         posts.extend(await ctx.obj["client"].posts(list(query), query_limit))
     # fmt: off
     await ctx.invoke(

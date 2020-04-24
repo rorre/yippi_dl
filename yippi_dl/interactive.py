@@ -1,12 +1,7 @@
-import re
-
 import asyncclick as click
 
-from . import helper
 from .__main__ import pool, post
-
-post_re = re.compile(r"e621.net\/posts\/(\d+)")
-pool_re = re.compile(r"e621.net\/pools\/(\d+)")
+from .helper import get_pool, get_pool_id, get_post, get_post_id
 
 
 def invalid_input(ctx):
@@ -23,22 +18,16 @@ async def select_post(ctx):
     click.echo("When you're done, you can give me an empty line.")
     posts = []
     while True:
-        response = click.prompt(
-            "", prompt_suffix="> ", default="", show_default=False
-        )
+        response = click.prompt("", prompt_suffix="> ", default="", show_default=False)
         if not response or not response.strip():
             break
 
-        match = post_re.search(response)
-        if match:
-            post_id = int(match.group(1))
-        elif response.isdigit():
-            post_id = int(response)
-        else:
+        post_id = get_post_id(response)
+        if not post_id:
             click.secho("Please send valid URL or post ID!")
             continue
 
-        obj = await helper.get_post(ctx, post_id)
+        obj = await get_post(ctx, post_id)
         if obj:
             posts.append(obj)
 
@@ -71,22 +60,18 @@ async def select_pool(ctx):
     click.echo("When you're done, you can give me an empty line.")
     pools = []
     while True:
-        response = click.prompt(
-            "", prompt_suffix="> ", default="", show_default=False
-        )
+        response = click.prompt("", prompt_suffix="> ", default="", show_default=False)
         if not response or not response.strip():
+            if not pools:
+                continue
             break
 
-        match = pool_re.search(response)
-        if match:
-            pool_id = int(match.group(1))
-        elif response.isdigit():
-            pool_id = int(response)
-        else:
+        pool_id = get_pool_id(response)
+        if not pool_id:
             click.secho("Please send valid URL or pool ID!")
             continue
 
-        obj = await helper.get_pool(ctx, pool_id)
+        obj = await get_pool(ctx, pool_id)
         if obj:
             pools.append(obj)  # noqa
         else:

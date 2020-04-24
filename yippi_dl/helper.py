@@ -1,15 +1,47 @@
+import re
+import traceback
 from functools import update_wrapper
 
 import asyncclick as click
-import traceback
+
+post_re = re.compile(r"e621.net\/posts\/(\d+)")
+pool_re = re.compile(r"e621.net\/pools\/(\d+)")
+
+
+def echo(message):
+    click.echo("[INFO] " + str(message))
 
 
 def error(message):
-    click.secho(message, fg="red")
+    click.secho("[ERR] " + str(message), fg="red")
 
 
 def warning(message):
-    click.secho(message, fg="yellow")
+    click.secho("[WARN] " + str(message), fg="yellow")
+
+
+def verbose(message):
+    ctx = click.get_current_context()
+    if ctx.obj["verbose"]:
+        click.secho("[VERB] " + str(message), fg="blue")
+
+
+def get_post_id(string):
+    if string.isdigit():
+        return string
+    match = post_re.search(string)
+    if not match:
+        return
+    return match.group(1)
+
+
+def get_pool_id(string):
+    if string.isdigit():
+        return string
+    match = pool_re.search(string)
+    if not match:
+        return
+    return match.group(1)
 
 
 def print_pool(pool):
@@ -43,8 +75,8 @@ def ask_skip(image_path):
         )
         option = click.getchar(echo=True).lower()
         click.echo("")
-        if option not in ("y", "n", "a", "e"):
-            continue
+        if option in ("y", "n", "a", "e"):
+            break
 
     return option
 
@@ -82,6 +114,8 @@ def common_decorator(f):
 async def download_worker(ctx, session, bar, queue):
     while True:
         url, target, post = await queue.get()
+        verbose(f"Get work with variables: {url}, {target}, {post}")
+        verbose("Start download")
         async with session.get(url) as r:
             r.raise_for_status()
 
@@ -89,9 +123,15 @@ async def download_worker(ctx, session, bar, queue):
                 if not ctx.obj["banner_printed"]:
                     print_post(post)
             except Exception as err:
-                traceback.print_exception(type(err), err, err.__traceback__)
+                # fmt: off
+                if ctx.obj["verbose"]:
+                    traceback.print_exception(
+                        type(err), err, err.__traceback__
+                    )
+                # fmt: on
                 error(f"An exception has occured: `{err.__class__.__name__}`")
 
+            verbose("Opening target: " + str(target))
             with open(target, "wb") as f:
                 try:
                     while True:
@@ -101,26 +141,36 @@ async def download_worker(ctx, session, bar, queue):
                         f.write(chunk)
                 except Exception as err:
                     # fmt: off
+                    if ctx.obj["verbose"]:
+                        traceback.print_exception(
+                            type(err), err, err.__traceback__
+                        )
+
                     error(
                         f"An exception has occured: `{err.__class__.__name__}`"
                     )
                     # fmt: on
 
+        verbose("Done. Updating bar and marking as done.")
         bar.update(1)
         queue.task_done()
 
 
 async def get_post(ctx, post_id):
+    verbose("Getting post: " + str(post_id))
     try:
         return await ctx.obj["client"].post(post_id)
     except Exception as err:
-        traceback.print_exception(type(err), err, err.__traceback__)
+        if ctx.obj["verbose"]:
+            traceback.print_exception(type(err), err, err.__traceback__)
         error(f"An exception has occured: `{err.__class__.__name__}`")
 
 
 async def get_pool(ctx, pool_id):
+    verbose("Getting pool: " + str(pool_id))
     try:
         return await ctx.obj["client"].pool(pool_id)
     except Exception as err:
-        traceback.print_exception(type(err), err, err.__traceback__)
+        if ctx.obj["verbose"]:
+            traceback.print_exception(type(err), err, err.__traceback__)
         error(f"An exception has occured: `{err.__class__.__name__}`")
