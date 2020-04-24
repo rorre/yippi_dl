@@ -34,6 +34,21 @@ def print_post(post):
     click.echo("==================")
 
 
+def ask_skip(image_path):
+    while True:
+        click.echo(
+            image_path + " already exists, do you want to skip? "
+            "[(A)lways/(Y)es/(N)o/N(e)ver]",
+            nl=False,
+        )
+        option = click.getchar(echo=True).lower()
+        click.echo("")
+        if option not in ("y", "n", "a", "e"):
+            continue
+
+    return option
+
+
 def common_decorator(f):
     @click.option(
         "-o",

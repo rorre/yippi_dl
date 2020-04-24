@@ -5,6 +5,7 @@ from yippi import AsyncYippiClient
 import asyncclick as click
 
 from .helper import (
+    ask_skip,
     common_decorator,
     download_worker,
     error,
@@ -133,6 +134,7 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
     workers = []
     queue = asyncio.Queue()
     always_skip = False
+    always_replace = False
     with click.progressbar(length=total, label="Downloading posts...") as bar:
         for _ in range(jobs):
             # fmt: off
@@ -150,25 +152,18 @@ async def post(ctx, post_id, output, jobs, type, posts=None, add_number=False):
                 image_name = f"{number}. " + image_name
 
             image_path = os.path.join(output, image_name)
-            if os.path.exists(image_path):
-                if always_skip:
-                    bar.update(1)
-                    continue
+            if not always_replace:
+                if os.path.exists(image_path):
+                    if always_skip:
+                        bar.update(1)
+                        continue
+                    choice = ask_skip(image_path)
 
-                click.echo(
-                    image_path + " already exists, do you want to skip? "
-                    "[(A)lways/(Y)es/(N)o]",
-                    nl=False,
-                )
-                option = click.getchar(echo=True).lower()
-                click.echo("")
-                if option == "y":
-                    bar.update(1)
-                    continue
-                elif option == "a":
-                    always_skip = True
-                    bar.update(1)
-                    continue
+                    if choice in ("y", "a"):
+                        always_skip = choice == "a"
+                        bar.update(1)
+                    always_replace = choice == "e"
+
             number += 1
             await queue.put([image_url, image_path, post])
 
